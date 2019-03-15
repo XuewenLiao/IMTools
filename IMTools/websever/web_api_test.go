@@ -1,4 +1,4 @@
-package webtest
+package websever
 
 import (
 	"github.com/gin-gonic/gin"
