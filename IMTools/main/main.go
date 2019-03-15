@@ -1,7 +1,7 @@
 package main
 
 import (
-	"TLSSigAPI"
+	"IMTools/TLSSigAPI"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -50,6 +50,13 @@ type Creatgroup struct {
 	Name          string
 }
 
+type ReplyOfCreatgroup struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int
+	GroupId      string
+}
+
 type GetGroup struct {
 	ActionStatus string
 	ErrorInfo    string
@@ -91,7 +98,7 @@ func main() {
 参数：userSig——用户签名,groupId——群id集合，accoutNumOfgroup——群组中需要添加的用户数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
 返回值：URL和请求包
 */
-func AddGroupAccount(userSig string, groupId []string, accoutNumOfgroup int, allAccountsName []string) {
+func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int, allAccountsName []string) {
 	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/add_group_member?usersig=" + userSig + "&identifier=" + identifier + "&sdkappid=" + strconv.Itoa(appid) + "&random=99999999&contenttype=json"
 
 	//假设群成员上限为2，每次最多添加账号数为2
@@ -110,7 +117,7 @@ func AddGroupAccount(userSig string, groupId []string, accoutNumOfgroup int, all
 		//初始化数据结构体
 
 		groupMember = AddGroupMember{
-			GroupId:    groupId[0], //默认给第一个群组添加成员
+			GroupId:    groupId,
 			MemberList: memberArry,
 		}
 		fmt.Printf("groupMember--%v\n", groupMember)
@@ -192,12 +199,22 @@ func Creatgroup_PostData(userSig string, accoutNumOfgroup int, allAccountName []
 	replydata, err := HTTP_Post(httpUrl, string(re))
 	fmt.Printf("CreatgroupReplyData--%v\nerr--%v\n", replydata, err)
 
+	//解析应答包，获取groupId
+	groupInfo := ReplyOfCreatgroup{}
+	error := json.Unmarshal([]byte(replydata), &groupInfo)
+	if err != nil {
+		fmt.Printf("Release groupInfo fail:%v\n", error)
+	}
+	fmt.Printf("Get the groupInfo : %v\n", groupInfo)
+
+	groupId := groupInfo.GroupId
+
 	//获取所有groupId
-	groupIdArry := GetAllGroup(userSig)
-	fmt.Printf("GroupIdArry--%v\n", groupIdArry)
+	//groupIdArry := GetAllGroup(userSig)
+	//fmt.Printf("GroupIdArry--%v\n", groupIdArry)
 
 	//添加群组成员
-	AddGroupAccount(userSig, groupIdArry, accoutNumOfgroup, allAccountName)
+	AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountName)
 }
 
 /**
