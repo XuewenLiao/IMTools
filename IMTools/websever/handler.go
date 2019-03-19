@@ -10,7 +10,29 @@ import (
 	"strconv"
 )
 
-//批量加群，是只提供一个群id，给这个群加很多的用户，实现群成员人数达到指定数量的目标
+//批量发群消息
+func BatchSendGroupMsg(c *gin.Context) {
+	groupNum, _ := strconv.Atoi(c.Request.FormValue("groupnum"))
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+
+	apis.SendGroupMsg(userSig, groupNum)
+	c.JSON(http.StatusOK, gin.H{
+		"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	})
+}
+
+//批量发单聊消息
+func BatchSendC2CMsg(c *gin.Context) {
+	userNum, _ := strconv.Atoi(c.Request.FormValue("usernum"))
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+
+	apis.SendC2CMsg(userSig, userNum)
+	c.JSON(http.StatusOK, gin.H{
+		"usernum": "已成功向" + strconv.Itoa(userNum) + "个用户发消息",
+	})
+}
+
+//批量加群，是指提供一个群id，给这个群加很多的用户，实现群成员人数达到指定数量的目标
 func BatchAddGroup(c *gin.Context) {
 	groupId := c.Request.FormValue("groupid")
 	accoutNumOfgroup, _ := strconv.Atoi(c.Request.FormValue("accoutnumofgroup"))
@@ -20,14 +42,17 @@ func BatchAddGroup(c *gin.Context) {
 	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
 
 	//获取所有群组的Id
-	allAccountsName := apis.AllAccountsId
+	//allAccountsName := apis.AllAccountsId
+	allAccountsName := apis.Multiaccount_PostData(userSig, 100) //假设每次批量加群 注册的用户数为能容纳的用户上限
+
 	if allAccountsName == nil {
 		c.JSON(http.StatusOK, gin.H{
 			"error": "还没创建账户，请先进行建群操作！",
 		})
 	} else {
 
-		apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountsName)
+		//apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountsName)
+		apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup)
 
 		c.JSON(http.StatusOK, gin.H{
 			"groupid":          groupId,

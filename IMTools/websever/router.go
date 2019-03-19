@@ -14,5 +14,11 @@ func InitRouter() *gin.Engine {
 	//批量加好友url——http://127.0.0.1:8000/batchaddfriend？userid=xxx&friendnum=xxx
 	router.POST("/batchaddfriend", BatchAddFriend)
 
+	//批量发单聊信息url——http://127.0.0.1:8000/batchsendc2cmsg？usernum=xxx
+	router.POST("/batchsendc2cmsg", BatchSendC2CMsg)
+
+	//批量发群聊信息url——http://127.0.0.1:8000/batchsendgroupmsg？groupnum=xxx
+	router.POST("/batchsendgroupmsg", BatchSendGroupMsg)
+
 	return router
 }

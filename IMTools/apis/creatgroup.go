@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -76,7 +77,7 @@ type DeleteFriendAll struct {
 type SendC2CMes struct {
 	SyncOtherMachine int
 	To_Account       []string
-	MsgRandom        int
+	MsgRandom        int32
 	MsgBody          []interface{}
 }
 
@@ -97,6 +98,150 @@ type MsgBodyFace struct {
 type MsgContentFace struct {
 	Index int
 	Data  string
+}
+
+func (msb *SendC2CMes) Add(elem interface{}) []interface{} {
+	//msgBody := msb.MsgBody
+	msb.MsgBody = append(msb.MsgBody, elem)
+	fmt.Printf("msgBody--%v\n", msb.MsgBody)
+
+	return msb.MsgBody
+}
+
+type SendGroupMes struct {
+	GroupId string
+	Random  int32
+	MsgBody []interface{}
+}
+
+func (msb *SendGroupMes) Add(elem interface{}) []interface{} {
+	//msgBody := msb.MsgBody
+	msb.MsgBody = append(msb.MsgBody, elem)
+	fmt.Printf("msgBody--%v\n", msb.MsgBody)
+
+	return msb.MsgBody
+}
+
+/**
+功能：批量发群消息
+参数：userSig——用户签名,userNum——要群发的用户数目
+*/
+func SendGroupMsg(userSig string, groupNum int) {
+	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/send_group_msg?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	sendGroupMes := SendGroupMes{}
+	msgBodyText := MsgBodyText{}
+	msgBodyFace := MsgBodyFace{}
+	msgContentText := MsgContentText{}
+	msgContentFace := MsgContentFace{}
+
+	sendGroupMes.Random = rand.Int31()
+
+	msgContentText.Text = "Hello Groups !"
+	msgBodyText.MsgType = "TIMTextElem"
+	msgBodyText.MsgContent = msgContentText
+	sendGroupMes.Add(msgBodyText)
+
+	msgContentFace.Index = 6
+	msgContentFace.Data = "abc\u0000\u0001"
+	msgBodyFace.MsgType = "TIMFaceElem"
+	msgBodyFace.MsgContent = msgContentFace
+	sendGroupMes.Add(msgBodyFace)
+
+	fmt.Printf("sendGroupMes--%v\n", sendGroupMes)
+
+	groupIdArray := GetAllGroup(userSig)
+
+	for i := 0; i < groupNum; i++ {
+		sendGroupMes.GroupId = groupIdArray[i]
+		re, err := json.Marshal(sendGroupMes)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("sendGroupMes request json--%s\n", re)
+
+		//访问IM后台
+		replydata, err := HTTP_Post(httpUrl, string(re))
+		fmt.Printf("sendGroupMes--%v\nerr--%v\n", replydata, err)
+	}
+}
+
+/**
+功能：批量发单聊消息
+参数：userSig——用户签名,userNum——要群发的用户数目
+*/
+func SendC2CMsg(userSig string, userNum int) {
+	httpUrl := "https://console.tim.qq.com/v4/openim/batchsendmsg?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	sendC2CMes := SendC2CMes{}
+	msgBodyText := MsgBodyText{}
+	msgBodyFace := MsgBodyFace{}
+	msgContentText := MsgContentText{}
+	msgContentFace := MsgContentFace{}
+
+	var userNameArray []string
+
+	//假设一次对最多5个用户进行单发消息
+	numLimit := 5
+	if userNum >= numLimit {
+		temp := userNum % numLimit
+		if temp == 0 { //要发的用户数刚好是上限的整数倍
+
+			for i := 0; i < userNum; i = i + numLimit {
+
+				userNameArray = append(userNameArray, packC2CMsg(i, numLimit)...)
+
+			}
+		} else {
+			remaind := userNum - temp
+			for i := 0; i < remaind; i = i + numLimit {
+				userNameArray = append(userNameArray, packC2CMsg(i, numLimit)...)
+			}
+			userNameArray = append(userNameArray, packC2CMsg(remaind, temp)...)
+		}
+	} else {
+		userNameArray = packC2CMsg(0, userNum)
+	}
+
+	sendC2CMes.To_Account = userNameArray
+	sendC2CMes.SyncOtherMachine = 2
+	sendC2CMes.MsgRandom = rand.Int31()
+
+	msgContentText.Text = "Hello everbody !"
+	msgBodyText.MsgType = "TIMTextElem"
+	msgBodyText.MsgContent = msgContentText
+	sendC2CMes.Add(msgBodyText)
+
+	msgContentFace.Index = 6
+	msgContentFace.Data = "content"
+	msgBodyFace.MsgType = "TIMFaceElem"
+	msgBodyFace.MsgContent = msgContentFace
+	sendC2CMes.Add(msgBodyFace)
+
+	fmt.Printf("sendC2CMes--%v\n", sendC2CMes)
+
+	re, err := json.Marshal(sendC2CMes)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("sendC2CMes request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(httpUrl, string(re))
+	fmt.Printf("SendC2CMes--%v\nerr--%v\n", replydata, err)
+
+}
+
+func packC2CMsg(index int, userNum int) []string {
+
+	var userNameArray []string
+	for j := index; j < index+userNum; j++ {
+		userName := "user" + strconv.Itoa(j+1)
+		userNameArray = append(userNameArray, userName)
+	}
+
+	return userNameArray
+
 }
 
 //删除指定用户的所有好友
@@ -166,7 +311,7 @@ func AddFriend(userSig string, userId string, friendNum int) {
 参数：userSig——用户签名,groupId——群id集合，groupId—目标群组Id（后期需从前端获取），accoutNumOfgroup——群组中需要添加的用户数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
 返回值：URL和请求包
 */
-func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int, allAccountsName []string) {
+func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int) { //, allAccountsName []string
 	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/add_group_member?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
 	//假设群成员上限为2，每次最多添加账号数为2
@@ -175,36 +320,69 @@ func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int, allAc
 	var memberAccount = MemberAccount{}
 	var memberArry []MemberAccount
 
-	for i := 0; i < accoutNumOfgroup; i = i + memberLimit {
-		for j := i; j < i+memberLimit; j++ {
-			memberAccount.Member_Account = allAccountsName[j]
-			memberArry = append(memberArry, memberAccount)
+	if accoutNumOfgroup >= memberLimit {
+		temp := accoutNumOfgroup % memberLimit
+		if temp == 0 { //要发的用户数刚好是上限的整数倍
 
+			for i := 0; i < accoutNumOfgroup; i = i + memberLimit {
+
+				memberArry = append(memberArry, dealGroupAccount(i, memberLimit, memberAccount)...)
+
+			}
+		} else {
+			remaind := accoutNumOfgroup - temp
+			for i := 0; i < remaind; i = i + memberLimit {
+				memberArry = append(memberArry, dealGroupAccount(i, memberLimit, memberAccount)...)
+			}
+			memberArry = append(memberArry, dealGroupAccount(remaind, temp, memberAccount)...)
 		}
-
-		//初始化数据结构体
-
-		groupMember = AddGroupMember{
-			GroupId:    groupId,
-			MemberList: memberArry,
-		}
-		fmt.Printf("groupMember--%v\n", groupMember)
-
-		//封装json应答包
-		re, err := json.Marshal(groupMember)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("AddGroupMember request json--%s\n", re)
-
-		//访问IM后台
-		replydata, err := HTTP_Post(httpUrl, string(re))
-		fmt.Printf("AddGroupMember--%v\nerr--%v\n", replydata, err)
-
-		//清空账号结构体
-		memberArry = memberArry[:0]
-
+	} else {
+		memberArry = dealGroupAccount(0, accoutNumOfgroup, memberAccount)
 	}
+
+	//for i := 0; i < accoutNumOfgroup; i = i + memberLimit {
+	//	for j := i; j < i+memberLimit; j++ {
+	//		memberAccount.Member_Account = allAccountsName[j]
+	//		memberArry = append(memberArry, memberAccount)
+	//
+	//	}
+
+	//初始化数据结构体
+
+	groupMember = AddGroupMember{
+		GroupId:    groupId,
+		MemberList: memberArry,
+	}
+	fmt.Printf("groupMember--%v\n", groupMember)
+
+	//封装json应答包
+	re, err := json.Marshal(groupMember)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("AddGroupMember request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(httpUrl, string(re))
+	fmt.Printf("AddGroupMember--%v\nerr--%v\n", replydata, err)
+
+	//清空账号结构体
+	memberArry = memberArry[:0]
+
+}
+
+//}
+
+func dealGroupAccount(index int, userNum int, memberAccount MemberAccount) []MemberAccount {
+
+	var userNameArray []MemberAccount
+	for j := index; j < index+userNum; j++ {
+
+		memberAccount.Member_Account = "user" + strconv.Itoa(j+2)
+		userNameArray = append(userNameArray, memberAccount)
+	}
+
+	return userNameArray
 
 }
 
