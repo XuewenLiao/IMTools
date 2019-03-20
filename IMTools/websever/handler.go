@@ -79,10 +79,11 @@ func BatchCreatGroup(c *gin.Context) {
 	//生成群组
 	apis.BatchCreatgroup(userSig, groupNum, allAccountsName)
 
-	c.JSON(http.StatusOK, gin.H{
-		"accountsnum": accountsNum,
-		"groupnum":    groupNum,
-	})
+	c.String(http.StatusOK, "成功添加"+strconv.Itoa(groupNum)+"个群组")
+	//c.JSON(http.StatusOK, gin.H{
+	//	"accountsnum": accountsNum,
+	//	"groupnum":    groupNum,
+	//})
 
 }
 
