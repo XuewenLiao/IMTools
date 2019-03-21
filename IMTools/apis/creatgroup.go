@@ -3,19 +3,27 @@ package apis
 import (
 	"IMTools/sdkconst"
 	"encoding/json"
-	"fmt"
+	//"printLog"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
 
-var AllAccountsId []string
+//var AllAccountsId []string
 
 type Multiaccount struct {
 	Accounts []string
+}
+
+type ReMultiaccount struct {
+	ActionStatus string
+	ErrorCode    int64
+	ErrorInfo    string
+	FailAccounts []string
 }
 
 type AllAccountName struct {
@@ -31,10 +39,10 @@ type Creatgroup struct {
 	Name          string
 }
 
-type ReplyOfCreatgroup struct {
+type ReCreatgroup struct {
 	ActionStatus string
 	ErrorInfo    string
-	ErrorCode    int
+	ErrorCode    int64
 	GroupId      string
 }
 
@@ -56,6 +64,13 @@ type AddGroupMember struct {
 	MemberList []MemberAccount
 }
 
+type ReAddGroupMember struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+	MemberList   []MemberAccount
+}
+
 type MemberAccount struct {
 	Member_Account string
 }
@@ -68,6 +83,21 @@ type BatchAddFriend struct {
 type AddFriendItem struct {
 	To_Account string
 	AddSource  string
+}
+
+type ReBatchAddFriend struct {
+	ResultItem      []ReAddFriendItem
+	Fail_Account    []string
+	Invalid_Account string
+	ErrorCode       int64
+	ErrorInfo       string
+	ErrorDisplay    string
+}
+
+type ReAddFriendItem struct {
+	To_Account string
+	ResultCode int64
+	ResultInfo string
 }
 
 type DeleteFriendAll struct {
@@ -103,10 +133,27 @@ type MsgContentFace struct {
 func (msb *SendC2CMes) Add(elem interface{}) []interface{} {
 	//msgBody := msb.MsgBody
 	msb.MsgBody = append(msb.MsgBody, elem)
-	fmt.Printf("msgBody--%v\n", msb.MsgBody)
+	printLog.Printf("msgBody--%v\n", msb.MsgBody)
 
 	return msb.MsgBody
 }
+
+type ReSendC2CMes struct {
+	ErrorInfo    string
+	ActionStatus string
+	ErrorCode    int64
+}
+
+//type ReSendC2CMes struct {
+//	ActionStatus string
+//	ErrorInfo string
+//	ErrorList []ErrorList
+//}
+//
+//type ErrorList struct {
+//	To_Account string
+//	ErrorCode int64
+//}
 
 type SendGroupMes struct {
 	GroupId string
@@ -117,17 +164,33 @@ type SendGroupMes struct {
 func (msb *SendGroupMes) Add(elem interface{}) []interface{} {
 	//msgBody := msb.MsgBody
 	msb.MsgBody = append(msb.MsgBody, elem)
-	fmt.Printf("msgBody--%v\n", msb.MsgBody)
+	printLog.Printf("msgBody--%v\n", msb.MsgBody)
 
 	return msb.MsgBody
 }
 
+type ReSendGroupMes struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+	MsgTime      int64
+	MsgSeq       int64
+}
+
+var (
+	logFile, err = os.OpenFile("./IMTools/go.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	printLog     = log.New(logFile, "[print]", log.Ldate|log.Ltime|log.Llongfile)
+)
+
 /**
 功能：批量发群消息
 参数：userSig——用户签名,userNum——要群发的用户数目
+返回值：错误码
 */
-func SendGroupMsg(userSig string, groupNum int) {
+func SendGroupMsg(userSig string, groupNum int) int64 {
 	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/send_group_msg?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	var errorCode int64
 
 	sendGroupMes := SendGroupMes{}
 	msgBodyText := MsgBodyText{}
@@ -148,7 +211,7 @@ func SendGroupMsg(userSig string, groupNum int) {
 	msgBodyFace.MsgContent = msgContentFace
 	sendGroupMes.Add(msgBodyFace)
 
-	fmt.Printf("sendGroupMes--%v\n", sendGroupMes)
+	printLog.Printf("sendGroupMes--%v\n", sendGroupMes)
 
 	groupIdArray := GetAllGroup(userSig)
 
@@ -158,28 +221,30 @@ func SendGroupMsg(userSig string, groupNum int) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("sendGroupMes request json--%s\n", re)
+		printLog.Printf("sendGroupMes request json--%s\n", re)
 
 		//访问IM后台
 		replydata, err := HTTP_Post(httpUrl, string(re))
-		fmt.Printf("sendGroupMes--%v\nerr--%v\n", replydata, err)
+		printLog.Printf("sendGroupMes--%v\nerr--%v\n", replydata, err)
+
+		reSendGroupMes := ReSendGroupMes{}
+		json.Unmarshal([]byte(replydata), &reSendGroupMes)
+
+		errorCode = reSendGroupMes.ErrorCode
 	}
+	return errorCode
 }
 
 /**
 功能：批量发单聊消息
 参数：userSig——用户签名,userNum——要群发的用户数目
+返回：失败用户信息
 */
-func SendC2CMsg(userSig string, userNum int) {
+func SendC2CMsg(userSig string, userNum int) int64 {
 	httpUrl := "https://console.tim.qq.com/v4/openim/batchsendmsg?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
-	sendC2CMes := SendC2CMes{}
-	msgBodyText := MsgBodyText{}
-	msgBodyFace := MsgBodyFace{}
-	msgContentText := MsgContentText{}
-	msgContentFace := MsgContentFace{}
-
 	var userNameArray []string
+	var errorCode int64
 
 	//假设一次对最多5个用户进行单发消息
 	numLimit := 5
@@ -190,18 +255,51 @@ func SendC2CMsg(userSig string, userNum int) {
 			for i := 0; i < userNum; i = i + numLimit {
 
 				userNameArray = append(userNameArray, packC2CMsg(i, numLimit)...)
+				errorCode = Post_SendC2CMsg(httpUrl, userNameArray)
+				//清空临时数组
+				userNameArray = userNameArray[:0]
 
 			}
 		} else {
 			remaind := userNum - temp
 			for i := 0; i < remaind; i = i + numLimit {
 				userNameArray = append(userNameArray, packC2CMsg(i, numLimit)...)
+				errorCode = Post_SendC2CMsg(httpUrl, userNameArray)
+				//清空临时数组
+				userNameArray = userNameArray[:0]
 			}
 			userNameArray = append(userNameArray, packC2CMsg(remaind, temp)...)
+			errorCode = Post_SendC2CMsg(httpUrl, userNameArray)
+
 		}
 	} else {
 		userNameArray = packC2CMsg(0, userNum)
+		errorCode = Post_SendC2CMsg(httpUrl, userNameArray)
+
 	}
+
+	return errorCode
+
+}
+
+func packC2CMsg(index int, userNum int) []string {
+
+	var userNameArray []string
+	for j := index; j < index+userNum; j++ {
+		userName := "user" + strconv.Itoa(j+1)
+		userNameArray = append(userNameArray, userName)
+	}
+
+	return userNameArray
+
+}
+
+func Post_SendC2CMsg(url string, userNameArray []string) int64 {
+	sendC2CMes := SendC2CMes{}
+	msgBodyText := MsgBodyText{}
+	msgBodyFace := MsgBodyFace{}
+	msgContentText := MsgContentText{}
+	msgContentFace := MsgContentFace{}
 
 	sendC2CMes.To_Account = userNameArray
 	sendC2CMes.SyncOtherMachine = 2
@@ -218,30 +316,26 @@ func SendC2CMsg(userSig string, userNum int) {
 	msgBodyFace.MsgContent = msgContentFace
 	sendC2CMes.Add(msgBodyFace)
 
-	fmt.Printf("sendC2CMes--%v\n", sendC2CMes)
+	printLog.Printf("sendC2CMes--%v\n", sendC2CMes)
 
 	re, err := json.Marshal(sendC2CMes)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("sendC2CMes request json--%s\n", re)
+	printLog.Printf("sendC2CMes request json--%s\n", re)
 
 	//访问IM后台
-	replydata, err := HTTP_Post(httpUrl, string(re))
-	fmt.Printf("SendC2CMes--%v\nerr--%v\n", replydata, err)
+	replydata, err := HTTP_Post(url, string(re))
+	printLog.Printf("SendC2CMes--%v\nerr--%v\n", replydata, err)
 
-}
+	reSendC2CMes := ReSendC2CMes{}
+	json.Unmarshal([]byte(replydata), &reSendC2CMes)
 
-func packC2CMsg(index int, userNum int) []string {
+	errorCode := reSendC2CMes.ErrorCode
+	//errorList := reSendC2CMes.ErrorList
+	//printLog.Printf("reSendC2CMes--%v\n",reSendC2CMes)
 
-	var userNameArray []string
-	for j := index; j < index+userNum; j++ {
-		userName := "user" + strconv.Itoa(j+1)
-		userNameArray = append(userNameArray, userName)
-	}
-
-	return userNameArray
-
+	return errorCode
 }
 
 //删除指定用户的所有好友
@@ -256,27 +350,28 @@ func DeleteFriend(userSig string, userId string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("DeleteFriendAll request json--%s\n", re)
+	printLog.Printf("DeleteFriendAll request json--%s\n", re)
 
 	//访问IM后台
 	replydata, err := HTTP_Post(httpUrl, string(re))
-	fmt.Printf("DeleteFriendAll--%v\nerr--%v\n", replydata, err)
+	printLog.Printf("DeleteFriendAll--%v\nerr--%v\n", replydata, err)
 }
 
 /**
 功能：批量添加好友——指定一个用户Id，加指定个数的好友（没排除自己，自己也可以是自己的一个好友）
 参数：userSig——用户签名,groupId——群id集合，accoutNumOfgroup——群组中需要添加的用户数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
-返回值：URL和请求包
+返回值：错误码
 */
-func AddFriend(userSig string, userId string, friendNum int) {
+func AddFriend(userSig string, userId string, friendNum int) int64 {
 	httpUrl := "https://console.tim.qq.com/v4/sns/friend_add?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
 	var batchAddFriend = BatchAddFriend{}
 	var addFriendItem = AddFriendItem{}
 	var friendArray []AddFriendItem
+	var errorCode int64
 
 	//通过批量添加账号获取所有用户名集合，这里默认添加账户数为系统上限（100）
-	var userIdArray = Multiaccount_PostData(userSig, 100)
+	var userIdArray, _ = Multiaccount_PostData(userSig, 100)
 
 	for i := 0; i < friendNum; i++ {
 		//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
@@ -298,20 +393,27 @@ func AddFriend(userSig string, userId string, friendNum int) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("BatchAddFriend request json--%s\n", re)
+	printLog.Printf("BatchAddFriend request json--%s\n", re)
 
 	//访问IM后台
 	replydata, err := HTTP_Post(httpUrl, string(re))
-	fmt.Printf("BatchAddFriend--%v\nerr--%v\n", replydata, err)
+	printLog.Printf("BatchAddFriend--%v\nerr--%v\n", replydata, err)
+
+	reBatchAddFriend := ReBatchAddFriend{}
+	json.Unmarshal([]byte(replydata), &reBatchAddFriend)
+
+	errorCode = reBatchAddFriend.ErrorCode
+
+	return errorCode
 
 }
 
 /**
 功能：增加群组成员
 参数：userSig——用户签名,groupId——群id集合，groupId—目标群组Id（后期需从前端获取），accoutNumOfgroup——群组中需要添加的用户数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
-返回值：URL和请求包
+返回值：错误码
 */
-func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int) { //, allAccountsName []string
+func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int) int64 { //, allAccountsName []string
 	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/add_group_member?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
 	//假设群成员上限为2，每次最多添加账号数为2
@@ -319,6 +421,7 @@ func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int) { //,
 	var groupMember = AddGroupMember{}
 	var memberAccount = MemberAccount{}
 	var memberArry []MemberAccount
+	var errorCode int64
 
 	if accoutNumOfgroup >= memberLimit {
 		temp := accoutNumOfgroup % memberLimit
@@ -327,48 +430,86 @@ func AddGroupAccount(userSig string, groupId string, accoutNumOfgroup int) { //,
 			for i := 0; i < accoutNumOfgroup; i = i + memberLimit {
 
 				memberArry = append(memberArry, dealGroupAccount(i, memberLimit, memberAccount)...)
+				errorCode = Post_AddGroupAccount(httpUrl, groupId, memberArry, groupMember)
+				//清空账号结构体
+				memberArry = memberArry[:0]
 
 			}
 		} else {
 			remaind := accoutNumOfgroup - temp
 			for i := 0; i < remaind; i = i + memberLimit {
 				memberArry = append(memberArry, dealGroupAccount(i, memberLimit, memberAccount)...)
+				errorCode = Post_AddGroupAccount(httpUrl, groupId, memberArry, groupMember)
+				//清空账号结构体
+				memberArry = memberArry[:0]
+
 			}
 			memberArry = append(memberArry, dealGroupAccount(remaind, temp, memberAccount)...)
+			errorCode = Post_AddGroupAccount(httpUrl, groupId, memberArry, groupMember)
+
 		}
 	} else {
 		memberArry = dealGroupAccount(0, accoutNumOfgroup, memberAccount)
+		errorCode = Post_AddGroupAccount(httpUrl, groupId, memberArry, groupMember)
 	}
 
-	//for i := 0; i < accoutNumOfgroup; i = i + memberLimit {
-	//	for j := i; j < i+memberLimit; j++ {
-	//		memberAccount.Member_Account = allAccountsName[j]
-	//		memberArry = append(memberArry, memberAccount)
-	//
-	//	}
+	return errorCode
 
 	//初始化数据结构体
+
+	//groupMember = AddGroupMember{
+	//	GroupId:    groupId,
+	//	MemberList: memberArry,
+	//}
+	//printLog.Printf("groupMember--%v\n", groupMember)
+	//
+	////封装json应答包
+	//re, err := json.Marshal(groupMember)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//printLog.Printf("AddGroupMember request json--%s\n", re)
+	//
+	////访问IM后台
+	//replydata, err := HTTP_Post(httpUrl, string(re))
+	//printLog.Printf("AddGroupMember--%v\nerr--%v\n", replydata, err)
+	//
+	//reAddGroupMember := ReAddGroupMember{}
+	//json.Unmarshal([]byte(replydata), &reAddGroupMember)
+	//
+	//errorCode = reAddGroupMember.ErrorCode
+	//return errorCode
+
+	//清空账号结构体
+	//memberArry = memberArry[:0]
+
+}
+
+func Post_AddGroupAccount(url string, groupId string, memberArry []MemberAccount, groupMember AddGroupMember) int64 {
 
 	groupMember = AddGroupMember{
 		GroupId:    groupId,
 		MemberList: memberArry,
 	}
-	fmt.Printf("groupMember--%v\n", groupMember)
+	printLog.Printf("groupMember--%v\n", groupMember)
 
 	//封装json应答包
 	re, err := json.Marshal(groupMember)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("AddGroupMember request json--%s\n", re)
+	printLog.Printf("AddGroupMember request json--%s\n", re)
 
 	//访问IM后台
-	replydata, err := HTTP_Post(httpUrl, string(re))
-	fmt.Printf("AddGroupMember--%v\nerr--%v\n", replydata, err)
+	replydata, err := HTTP_Post(url, string(re))
+	printLog.Printf("AddGroupMember--%v\nerr--%v\n", replydata, err)
 
-	//清空账号结构体
-	memberArry = memberArry[:0]
+	reAddGroupMember := ReAddGroupMember{}
+	json.Unmarshal([]byte(replydata), &reAddGroupMember)
 
+	errorCode := reAddGroupMember.ErrorCode
+
+	return errorCode
 }
 
 //}
@@ -378,7 +519,7 @@ func dealGroupAccount(index int, userNum int, memberAccount MemberAccount) []Mem
 	var userNameArray []MemberAccount
 	for j := index; j < index+userNum; j++ {
 
-		memberAccount.Member_Account = "user" + strconv.Itoa(j+2)
+		memberAccount.Member_Account = "user" + strconv.Itoa(j+1)
 		userNameArray = append(userNameArray, memberAccount)
 	}
 
@@ -397,16 +538,16 @@ func GetAllGroup(userSig string) []string {
 
 	//访问IM后台
 	replydata, err := HTTP_Post(httpUrl, "{}")
-	fmt.Printf("CreatgroupReplyData--%v\nerr--%v\n", replydata, err)
+	printLog.Printf("CreatgroupReplyData--%v\nerr--%v\n", replydata, err)
 
 	//解析应答包
 	groupInfo := GetGroup{}
 
 	error := json.Unmarshal([]byte(replydata), &groupInfo)
 	if err != nil {
-		fmt.Printf("Release groupInfo fail:%v\n", error)
+		printLog.Printf("Release groupInfo fail:%v\n", error)
 	}
-	fmt.Printf("Get all groupInfo : %v\n", groupInfo)
+	printLog.Printf("Get all groupInfo : %v\n", groupInfo)
 
 	//取出所有groupId
 	var groupIdArry []string
@@ -421,11 +562,13 @@ func GetAllGroup(userSig string) []string {
 /**
 功能：批量创建群组
 参数：userSig——用户签名,groupNum——需要添加的群组数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
-返回值：URL和请求包
+返回值：错误码
 */
-func BatchCreatgroup(userSig string, groupNum int, allAccountName []string) { //accoutNumOfgroup int
+func BatchCreatgroup(userSig string, groupNum int, allAccountName []string) int64 { //accoutNumOfgroup int
 
 	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/create_group?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	var errorCode int64
 
 	for i := 0; i < groupNum; i++ {
 
@@ -442,83 +585,146 @@ func BatchCreatgroup(userSig string, groupNum int, allAccountName []string) { //
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Multiaccount request json--%s\n", re)
+		printLog.Printf("Multiaccount request json--%s\n", re)
 
 		//访问IM后台
 		replydata, err := HTTP_Post(httpUrl, string(re))
-		fmt.Printf("CreatgroupReplyData--%v\nerr--%v\n", replydata, err)
+		printLog.Printf("CreatgroupReplyData--%v\nerr--%v\n", replydata, err)
+
+		reCreatgroup := ReCreatgroup{}
+		json.Unmarshal([]byte(replydata), &reCreatgroup)
+
+		errorCode = reCreatgroup.ErrorCode
 	}
-
-	//解析应答包，获取groupId
-	//groupInfo := ReplyOfCreatgroup{}
-	//error := json.Unmarshal([]byte(replydata), &groupInfo)
-	//if err != nil {
-	//	fmt.Printf("Release groupInfo fail:%v\n", error)
-	//}
-	//fmt.Printf("Get the groupInfo : %v\n", groupInfo)
-	//
-	//groupId := groupInfo.GroupId
-
-	//获取所有groupId
-	//groupIdArry := GetAllGroup(userSig)
-	//fmt.Printf("GroupIdArry--%v\n", groupIdArry)
-
-	//添加群组成员
-	//AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountName)
+	return errorCode
 }
 
 /**
 功能：批量添加账户添加
 参数：userSig——用户签名,accountsnum——需要添加的账号数量（后期需从前端获取）
-返回值：所有账户的用户名
+返回值：所有账户的用户名,错误码
 */
-func Multiaccount_PostData(userSig string, accountsnum int) []string {
+func Multiaccount_PostData(userSig string, accountsnum int) ([]string, int64) {
 	httpUrl := "https://console.tim.qq.com/v4/im_open_login_svc/multiaccount_import?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
 	//假设单次请求导入账号数上限：10——需要添加的总账号数：accountsnum = 100
-	var accountLimit = 10
+	var accountLimit = 2
 	var multiaccount = Multiaccount{}
 	var accounts []string
 	var allAccounts []string
+	var errorCode int64
 
-	var num = 0
-	for i := 0; i < accountsnum; i = i + accountLimit {
+	if accountsnum >= accountLimit {
+		temp := accountsnum % accountLimit
+		if temp == 0 { //要发的用户数刚好是上限的整数倍
 
-		for j := 1; j <= accountLimit; j++ { //随机产生10个用户
-			num++
-			userName := "user" + strconv.Itoa(num)
-			accounts = append(accounts, userName)
+			for i := 0; i < accountsnum; i = i + accountLimit {
+
+				accounts = append(accounts, packC2CMsg(i, accountLimit)...)
+				errorCode = Post_Multiaccount(httpUrl, accounts, multiaccount)
+				//记录所有账号 供后续获取全部成功的账号
+				allAccounts = append(allAccounts, accounts...)
+				//清空临时数组
+				accounts = accounts[:0]
+
+			}
+		} else {
+			remaind := accountsnum - temp
+			for i := 0; i < remaind; i = i + accountLimit {
+				accounts = append(accounts, packC2CMsg(i, accountLimit)...)
+				errorCode = Post_Multiaccount(httpUrl, accounts, multiaccount)
+				//记录所有账号 供后续获取全部成功的账号
+				allAccounts = append(allAccounts, accounts...)
+				//清空临时数组
+				accounts = accounts[:0]
+			}
+			accounts = append(accounts, packC2CMsg(remaind, temp)...)
+			errorCode = Post_Multiaccount(httpUrl, accounts, multiaccount)
+			//记录所有账号 供后续获取全部成功的账号
+			allAccounts = append(allAccounts, accounts...)
+
 		}
-
+	} else {
+		accounts = packC2CMsg(0, accountsnum)
+		errorCode = Post_Multiaccount(httpUrl, accounts, multiaccount)
 		//记录所有账号 供后续获取全部成功的账号
 		allAccounts = append(allAccounts, accounts...)
 
-		//产生完10个用户后发起请求
-		multiaccount = Multiaccount{Accounts: accounts}
-		fmt.Printf("rebody--%v\n", multiaccount)
-
-		//清空账号结构体
-		accounts = accounts[:0]
-
-		//封装json请求包
-		re, err := json.Marshal(multiaccount)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Multiaccount request json--%s\n", re)
-
-		//访问IM后台
-		replydata, err := HTTP_Post(httpUrl, string(re))
-		fmt.Printf("AccountReplyData--%v\nerr--%v\n", replydata, err)
-
 	}
 
+	return allAccounts, errorCode
+
+	////记录所有账号 供后续获取全部成功的账号
+	//allAccounts = append(allAccounts, accounts...)
+
+	//var num = 0
+	//for i := 0; i < accountsnum; i = i + accountLimit {
+	//
+	//	for j := 1; j <= accountLimit; j++ { //随机产生10个用户
+	//		num++
+	//		userName := "user" + strconv.Itoa(num)
+	//		accounts = append(accounts, userName)
+	//	}
+	//
+	//	//记录所有账号 供后续获取全部成功的账号
+	//	allAccounts = append(allAccounts, accounts...)
+	//
+	//	//产生完10个用户后发起请求
+	//	multiaccount = Multiaccount{Accounts: accounts}
+	//	printLog.Printf("rebody--%v\n", multiaccount)
+	//
+	//	//清空账号结构体
+	//	accounts = accounts[:0]
+	//
+	//	//封装json请求包
+	//	re, err := json.Marshal(multiaccount)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	printLog.Printf("Multiaccount request json--%s\n", re)
+	//
+	//	//访问IM后台
+	//	replydata, err := HTTP_Post(httpUrl, string(re))
+	//	printLog.Printf("AccountReplyData--%v\nerr--%v\n", replydata, err)
+	//
+	//	reMultiaccount := ReMultiaccount{}
+	//	json.Unmarshal([]byte(replydata), &reMultiaccount)
+	//
+	//	errorCode = reMultiaccount.ErrorCode
+
+	//
+	//}
+
 	//这里应该加一个去除allAccounts中失败用户的功能（后续加）
-	AllAccountsId = allAccounts
-	fmt.Printf("allAccountsName--%v\n", allAccounts)
+	//AllAccountsId = allAccounts
+	//printLog.Printf("allAccountsName--%v\n", allAccounts)
 
-	return allAccounts
+	//return allAccounts,errorCode
 
+}
+
+func Post_Multiaccount(url string, accounts []string, multiaccount Multiaccount) int64 {
+	//产生完10个用户后发起请求
+	multiaccount = Multiaccount{Accounts: accounts}
+	printLog.Printf("rebody--%v\n", multiaccount)
+
+	//封装json请求包
+	re, err := json.Marshal(multiaccount)
+	if err != nil {
+		log.Fatal(err)
+	}
+	printLog.Printf("Multiaccount request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(url, string(re))
+	printLog.Printf("AccountReplyData--%v\nerr--%v\n", replydata, err)
+
+	reMultiaccount := ReMultiaccount{}
+	json.Unmarshal([]byte(replydata), &reMultiaccount)
+
+	errorCode := reMultiaccount.ErrorCode
+
+	return errorCode
 }
 
 /**
@@ -532,7 +738,7 @@ func HTTP_Post(url string, reqbody string) (string, error) {
 	//创建请求
 	postReq, err := http.NewRequest("POST", url, strings.NewReader(string(reqbody)))
 	if err != nil {
-		fmt.Println("POST请求:创建请求失败", err)
+		printLog.Println("POST请求:创建请求失败", err)
 	}
 
 	//增加header
@@ -543,16 +749,16 @@ func HTTP_Post(url string, reqbody string) (string, error) {
 	resp, err := client.Do(postReq)
 
 	if err != nil {
-		fmt.Println("POST请求:创建执行请求失败", err)
+		printLog.Println("POST请求:创建执行请求失败", err)
 	} else {
 		//读取请求
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			fmt.Println("POST请求:读取body失败", err)
+			printLog.Println("POST请求:读取body失败", err)
 		}
 
 		result = string(body)
-		fmt.Println("POST请求:创建成功", result)
+		printLog.Println("POST请求:创建成功", result)
 
 	}
 

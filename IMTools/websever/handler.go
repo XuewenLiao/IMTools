@@ -15,10 +15,15 @@ func BatchSendGroupMsg(c *gin.Context) {
 	groupNum, _ := strconv.Atoi(c.Request.FormValue("groupnum"))
 	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
 
-	apis.SendGroupMsg(userSig, groupNum)
-	c.JSON(http.StatusOK, gin.H{
-		"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
-	})
+	errorCode := apis.SendGroupMsg(userSig, groupNum)
+	if errorCode == 0 {
+		c.String(http.StatusOK, "成功向"+strconv.Itoa(groupNum)+"个群发消息")
+	} else {
+		c.String(http.StatusOK, "发送失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	//})
 }
 
 //批量发单聊消息
@@ -26,10 +31,29 @@ func BatchSendC2CMsg(c *gin.Context) {
 	userNum, _ := strconv.Atoi(c.Request.FormValue("usernum"))
 	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
 
-	apis.SendC2CMsg(userSig, userNum)
-	c.JSON(http.StatusOK, gin.H{
-		"usernum": "已成功向" + strconv.Itoa(userNum) + "个用户发消息",
-	})
+	errorCode := apis.SendC2CMsg(userSig, userNum)
+	if errorCode == 0 {
+		c.String(http.StatusOK, "成功向"+strconv.Itoa(userNum)+"个用户发送消息")
+	} else {
+		c.String(http.StatusOK, "发送失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+
+	//errorList := apis.SendC2CMsg(userSig, userNum)
+	//if len(errorList) == 0 {
+	//	c.String(http.StatusOK,"成功向" + strconv.Itoa(userNum) + "个用户发送消息")
+	//
+	//}else {
+	//	var errorString string
+	//	for i := 0; i < len(errorList); i++ {
+	//		errorString = errorString  + errorList[i].To_Account + "发送失败-错误码：" + strconv.FormatInt(errorList[i].ErrorCode,10) + "；"
+	//	}
+	//	c.String(http.StatusOK,errorString)
+	//
+	//}
+
+	//c.JSON(http.StatusOK, gin.H{
+	//	"usernum": "已成功向" + strconv.Itoa(userNum) + "个用户发消息",
+	//})
 }
 
 //批量加群，是指提供一个群id，给这个群加很多的用户，实现群成员人数达到指定数量的目标
@@ -43,21 +67,29 @@ func BatchAddGroup(c *gin.Context) {
 
 	//获取所有群组的Id
 	//allAccountsName := apis.AllAccountsId
-	allAccountsName := apis.Multiaccount_PostData(userSig, 100) //假设每次批量加群 注册的用户数为能容纳的用户上限
+	allAccountsName, errorCode1 := apis.Multiaccount_PostData(userSig, 2) //假设每次批量加群 注册的用户数为能容纳的用户上限
 
 	if allAccountsName == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"error": "还没创建账户，请先进行建群操作！",
-		})
+
+		c.String(http.StatusOK, "还没创建账户，请先进行建群操作！")
+		//c.JSON(http.StatusOK, gin.H{
+		//	"error": "还没创建账户，请先进行建群操作！",
+		//})
 	} else {
 
-		//apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountsName)
-		apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup)
+		if errorCode1 == 0 {
+			errorCode2 := apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup)
+			if errorCode2 == 0 {
+				c.JSON(http.StatusOK, "操作成功-群ID："+groupId+"；人数："+strconv.Itoa(accoutNumOfgroup))
 
-		c.JSON(http.StatusOK, gin.H{
-			"groupid":          groupId,
-			"accoutnumofgroup": accoutNumOfgroup,
-		})
+			} else {
+				c.String(http.StatusOK, "加群失败，errorCode："+strconv.FormatInt(errorCode2, 100))
+
+			}
+
+		}
+		//apis.AddGroupAccount(userSig, groupId, accoutNumOfgroup, allAccountsName)
+
 	}
 }
 
@@ -74,12 +106,23 @@ func BatchCreatGroup(c *gin.Context) {
 	//fmt.Printf("userSig: %v",userSig)
 
 	//批量添加账户
-	allAccountsName := apis.Multiaccount_PostData(userSig, accountsNum)
+	allAccountsName, errorCode := apis.Multiaccount_PostData(userSig, accountsNum)
+	if errorCode == 0 {
+		//生成群组
+		errorCode2 := apis.BatchCreatgroup(userSig, groupNum, allAccountsName)
+		if errorCode2 == 0 {
+			c.String(http.StatusOK, "成功添加"+strconv.Itoa(groupNum)+"个群组")
 
-	//生成群组
-	apis.BatchCreatgroup(userSig, groupNum, allAccountsName)
+		} else {
+			c.String(http.StatusOK, "添加群组失败，errorCode："+strconv.FormatInt(errorCode2, 10))
 
-	c.String(http.StatusOK, "成功添加"+strconv.Itoa(groupNum)+"个群组")
+		}
+
+	} else {
+		c.String(http.StatusOK, "创建账户失败，errorCode："+strconv.FormatInt(errorCode, 10))
+
+	}
+
 	//c.JSON(http.StatusOK, gin.H{
 	//	"accountsnum": accountsNum,
 	//	"groupnum":    groupNum,
@@ -101,11 +144,17 @@ func BatchAddFriend(c *gin.Context) {
 	apis.DeleteFriend(userSig, userId)
 
 	//批量加好友
-	apis.AddFriend(userSig, userId, friendNum)
+	errorCode := apis.AddFriend(userSig, userId, friendNum)
 
-	c.JSON(http.StatusOK, gin.H{
-		"userid":    userId,
-		"friendnum": friendNum,
-	})
+	if errorCode == 0 {
+		c.String(http.StatusOK, "操作成功-目标用户："+userId+"；添加好友数："+strconv.Itoa(friendNum))
+
+	} else {
+		c.String(http.StatusOK, "添加好友失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"userid":    userId,
+	//	"friendnum": friendNum,
+	//})
 
 }
