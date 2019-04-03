@@ -98,18 +98,20 @@ func BatchCreatGroup(c *gin.Context) {
 
 	accountsNum, _ := strconv.Atoi(c.Request.FormValue("accountsnum"))
 	groupNum, _ := strconv.Atoi(c.Request.FormValue("groupnum"))
+	accountName := c.Request.FormValue("accountname")
 
 	fmt.Printf("accountsNum--%v\ngroupNum--%v\n", accountsNum, groupNum)
 
 	//生成userSig(注意expire：签名过期时间，设置小了请求几次就会抱7001签名过期错误)
 	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
-	//fmt.Printf("userSig: %v",userSig)
+	fmt.Printf("userSig: %v", userSig)
 
 	//批量添加账户
-	allAccountsName, errorCode := apis.Multiaccount_PostData(userSig, accountsNum)
+	_, errorCode := apis.Multiaccount_PostData(userSig, accountsNum)
+
 	if errorCode == 0 {
 		//生成群组
-		errorCode2 := apis.BatchCreatgroup(userSig, groupNum, allAccountsName)
+		errorCode2 := apis.BatchCreatgroup(userSig, groupNum, accountName)
 		if errorCode2 == 0 {
 			c.String(http.StatusOK, "成功添加"+strconv.Itoa(groupNum)+"个群组")
 
@@ -123,12 +125,40 @@ func BatchCreatGroup(c *gin.Context) {
 
 	}
 
-	//c.JSON(http.StatusOK, gin.H{
-	//	"accountsnum": accountsNum,
-	//	"groupnum":    groupNum,
-	//})
-
 }
+
+////批量建群
+//func BatchCreatGroup(c *gin.Context) {
+//
+//	accountsNum, _ := strconv.Atoi(c.Request.FormValue("accountsnum"))
+//	groupNum, _ := strconv.Atoi(c.Request.FormValue("groupnum"))
+//
+//	fmt.Printf("accountsNum--%v\ngroupNum--%v\n", accountsNum, groupNum)
+//
+//	//生成userSig(注意expire：签名过期时间，设置小了请求几次就会抱7001签名过期错误)
+//	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+//	//fmt.Printf("userSig: %v",userSig)
+//
+//	//批量添加账户
+//	allAccountsName, errorCode := apis.Multiaccount_PostData(userSig, accountsNum)
+//
+//	if errorCode == 0 {
+//		//生成群组
+//		errorCode2 := apis.BatchCreatgroup(userSig, groupNum, allAccountsName)
+//		if errorCode2 == 0 {
+//			c.String(http.StatusOK, "成功添加"+strconv.Itoa(groupNum)+"个群组")
+//
+//		} else {
+//			c.String(http.StatusOK, "添加群组失败，errorCode："+strconv.FormatInt(errorCode2, 10))
+//
+//		}
+//
+//	} else {
+//		c.String(http.StatusOK, "创建账户失败，errorCode："+strconv.FormatInt(errorCode, 10))
+//
+//	}
+//
+//}
 
 //批量加好友，是只给一个用户账号，加很多的好友，实现好友数量达到指定数量的目标
 func BatchAddFriend(c *gin.Context) {
