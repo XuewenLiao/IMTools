@@ -10,6 +10,39 @@ import (
 	"strconv"
 )
 
+//在群组发送系统通知
+func SendGroupSysMsg(c *gin.Context) {
+	groupName := c.Request.FormValue("groupname")
+	content := c.Request.FormValue("content")
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+
+	errorCode := apis.SendSystemMsg(userSig, groupName, content)
+	if errorCode == 0 {
+		c.String(http.StatusOK, "发送系统通知成功！")
+	} else {
+		c.String(http.StatusOK, "发送系统通知失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	//})
+}
+
+//获取指定用户的好友列表
+func GetFriendList(c *gin.Context) {
+	userfrdid := c.Request.FormValue("userfrdid")
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+
+	friendNum, errorCode := apis.GetFriendList(userSig, userfrdid)
+	if errorCode == 0 {
+		c.String(http.StatusOK, userfrdid+"的好友数："+strconv.FormatInt(friendNum, 10))
+	} else {
+		c.String(http.StatusOK, "拉取好友失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	//})
+}
+
 //批量发群消息
 func BatchSendGroupMsg(c *gin.Context) {
 	groupNum, _ := strconv.Atoi(c.Request.FormValue("groupnum"))

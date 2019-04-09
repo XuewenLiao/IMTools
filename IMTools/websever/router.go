@@ -26,6 +26,12 @@ func InitRouter() *gin.Engine {
 	//批量发群聊信息url——http://127.0.0.1:8000/batchsendgroupmsg？groupnum=xxx
 	router.POST("/batchsendgroupmsg", BatchSendGroupMsg)
 
+	//拉取好友列表url——http://127.0.0.1:8000/getfriendlist？userfrdid=xxx
+	router.POST("/getfriendlist", GetFriendList)
+
+	//在指定群组发送系统通知url——http://127.0.0.1:8000/sendgroupsysmsg？groupname=xxx&content=xxx
+	router.POST("/sendgroupsysmsg", SendGroupSysMsg)
+
 	return router
 }
 

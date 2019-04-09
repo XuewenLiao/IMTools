@@ -176,10 +176,104 @@ type ReSendGroupMes struct {
 	MsgSeq       int64
 }
 
+type PullFriendList struct {
+	From_Account string
+	StartIndex   int64
+}
+
+type ReFriendList struct {
+	StartIndex   int64
+	FriendNum    int64
+	ActionStatus string
+	ErrorCode    int64
+	ErrorInfo    string
+	ErrorDisplay string
+}
+
+type SendSysMsg struct {
+	GroupId string
+	Content string
+}
+
+type ReSysMsg struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+}
+
 //var (
 //	logFile, err = os.OpenFile("./IMTools/go.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 //	printLog     = log.New(logFile, "[print]", log.Ldate|log.Ltime|log.Llongfile)
 //)
+
+/**
+功能：在指定群组发送系统通知
+参数：userSig——用户签名,groupId——目标群，content要发送的通知内容
+返回值：好友数，错误码
+*/
+func SendSystemMsg(userSig string, groupId string, content string) int64 {
+	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/send_group_system_notification?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	//var errorCode int64
+
+	var sendSysMsg = SendSysMsg{}
+	sendSysMsg.GroupId = groupId
+	sendSysMsg.Content = content
+
+	//封装json应答包
+	re, err := json.Marshal(sendSysMsg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("sendSysMsg request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(httpUrl, string(re))
+	fmt.Printf("sendSysMsg--%v\nerr--%v\n", replydata, err)
+
+	reSendSysMsg := ReSysMsg{}
+	json.Unmarshal([]byte(replydata), &reSendSysMsg)
+
+	errorCode := reSendSysMsg.ErrorCode
+
+	return errorCode
+
+}
+
+/**
+功能：拉取好友列表
+参数：userSig——用户签名,userId——目标用户
+返回值：好友数，错误码
+*/
+func GetFriendList(userSig string, userId string) (int64, int64) {
+	httpUrl := "https://console.tim.qq.com/v4/sns/friend_get_all?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
+	//var errorCode int64
+
+	var getFriendAll = PullFriendList{}
+	getFriendAll.From_Account = userId
+	getFriendAll.StartIndex = 0
+
+	//封装json应答包
+	re, err := json.Marshal(getFriendAll)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("GetFriendAll request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(httpUrl, string(re))
+	fmt.Printf("GetFriendAll--%v\nerr--%v\n", replydata, err)
+
+	reFriendLis := ReFriendList{}
+	json.Unmarshal([]byte(replydata), &reFriendLis)
+
+	errorCode := reFriendLis.ErrorCode
+	friendNum := reFriendLis.FriendNum
+
+	return friendNum, errorCode
+
+}
 
 /**
 功能：批量发群消息
@@ -370,7 +464,7 @@ func AddFriend(userSig string, userId string, friendNum int) int64 {
 	var errorCode int64
 
 	//通过批量添加账号获取所有用户名集合，这里默认添加账户数为系统上限（100）
-	var userIdArray, _ = Multiaccount_PostData(userSig, 100)
+	var userIdArray, _ = Multiaccount_PostData(userSig, friendNum)
 
 	for i := 0; i < friendNum; i++ {
 		//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
