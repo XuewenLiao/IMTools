@@ -10,6 +10,44 @@ import (
 	"strconv"
 )
 
+
+//根据固定群名称删除群组
+func DeleteGroupByName(c *gin.Context) {
+	sdkappid,_ := strconv.Atoi(c.Request.FormValue("sdkappid"))
+	identifier := c.Request.FormValue("identifier")
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKeyTimen, sdkappid, identifier, 60*60*24*180)
+
+	fmt.Printf("userSig--",userSig)
+	errorCode := apis.DeleteNameGroup(userSig,sdkappid,identifier)
+
+	if errorCode == 0 {
+		c.String(http.StatusOK, "删除群组成功！")
+	} else {
+		c.String(http.StatusOK, "删除群组失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	//})
+}
+
+//批量添加账户
+func BatchAddAccounts(c *gin.Context) {
+	allAccountsNum,_ := strconv.Atoi(c.Request.FormValue("allaccountsnum"))
+	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+
+	fmt.Printf("userSig--",userSig)
+	_,errorCode := apis.Multiaccount_PostData(userSig,allAccountsNum)
+
+	if errorCode == 0 {
+		c.String(http.StatusOK, "批量添加账户成功！")
+	} else {
+		c.String(http.StatusOK, "批量添加账户失败，errorCode："+strconv.FormatInt(errorCode, 10))
+	}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"groupnum": "已成功向" + strconv.Itoa(groupNum) + "个群发消息",
+	//})
+}
+
 //在群组发送系统通知
 func SendGroupSysMsg(c *gin.Context) {
 	groupName := c.Request.FormValue("groupname")
@@ -196,23 +234,29 @@ func BatchCreatGroup(c *gin.Context) {
 //批量加好友，是只给一个用户账号，加很多的好友，实现好友数量达到指定数量的目标
 func BatchAddFriend(c *gin.Context) {
 	userId := c.Request.FormValue("userid")
-	friendNum, _ := strconv.Atoi(c.Request.FormValue("friendnum"))
+	//friendNum,_:= strconv.Atoi(c.Request.FormValue("friendnum"))
+	friendNumFrom, _ := strconv.Atoi(c.Request.FormValue("friendnumfrom"))
+	friendNumTo, _ := strconv.Atoi(c.Request.FormValue("friendnumto"))
 
-	fmt.Printf("userId--%v\nfriendNum--%v\n", userId, friendNum)
+
+	//fmt.Printf("userId--%v\nfriendNum--%v\n", userId, friendNum)
 
 	//生成userSig(注意expire：签名过期时间，设置小了请求几次就会抱7001签名过期错误)
 	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
 
 	//批量删除指定用户的好友，保证每次操作都能使该用户有新的一批好友
-	apis.DeleteFriend(userSig, userId)
+	//apis.DeleteFriend(userSig, userId)
 
 	//批量加好友
-	errorCode := apis.AddFriend(userSig, userId, friendNum)
+	errorCode := apis.AddFriend(userSig, userId, friendNumFrom, friendNumTo)
 
 	if errorCode == 0 {
-		c.String(http.StatusOK, "操作成功-目标用户："+userId+"；添加好友数："+strconv.Itoa(friendNum))
+		c.String(http.StatusOK, "操作成功-目标用户："+userId+"；添加好友数："+strconv.Itoa(friendNumTo-friendNumFrom+1))
 
-	} else {
+	} else if errorCode == 1000 {
+		c.String(http.StatusOK, "添加好友失败，单次添加好友数超过1000 ！")
+
+	}else{
 		c.String(http.StatusOK, "添加好友失败，errorCode："+strconv.FormatInt(errorCode, 10))
 	}
 	//c.JSON(http.StatusOK, gin.H{
@@ -221,3 +265,37 @@ func BatchAddFriend(c *gin.Context) {
 	//})
 
 }
+
+//func BatchAddFriend(c *gin.Context) {
+//	userId := c.Request.FormValue("userid")
+//	friendNum,_:= strconv.Atoi(c.Request.FormValue("friendnum"))
+//	friendNumFrom, _ := strconv.Atoi(c.Request.FormValue("friendnumfrom"))
+//	friendNumTo, _ := strconv.Atoi(c.Request.FormValue("friendnumto"))
+//
+//
+//	fmt.Printf("userId--%v\nfriendNum--%v\n", userId, friendNum)
+//
+//	//生成userSig(注意expire：签名过期时间，设置小了请求几次就会抱7001签名过期错误)
+//	userSig, _ := TLSSigAPI.GenerateUsersigWithExpire(sdkconst.PrivateKey, sdkconst.Appid, sdkconst.Identifier, 60*60*24*180)
+//
+//	//批量删除指定用户的好友，保证每次操作都能使该用户有新的一批好友
+//	apis.DeleteFriend(userSig, userId)
+//
+//	//批量加好友
+//	errorCode := apis.AddFriend(userSig, userId, friendNum, friendNumFrom, friendNumTo)
+//
+//	if errorCode == 0 {
+//		c.String(http.StatusOK, "操作成功-目标用户："+userId+"；添加好友数："+strconv.Itoa(friendNumTo-friendNumFrom+1))
+//
+//	} else if errorCode == 1000 {
+//		c.String(http.StatusOK, "添加好友失败，单次添加好友数超过1000 ！")
+//
+//	}else{
+//		c.String(http.StatusOK, "添加好友失败，errorCode："+strconv.FormatInt(errorCode, 10))
+//	}
+//	//c.JSON(http.StatusOK, gin.H{
+//	//	"userid":    userId,
+//	//	"friendnum": friendNum,
+//	//})
+//
+//}

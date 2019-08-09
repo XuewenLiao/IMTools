@@ -178,6 +178,7 @@ type ReSendGroupMes struct {
 
 type PullFriendList struct {
 	From_Account string
+	TimeStamp	 int64
 	StartIndex   int64
 }
 
@@ -201,6 +202,36 @@ type ReSysMsg struct {
 	ErrorCode    int64
 }
 
+type DelGroup struct {
+	GroupId string
+}
+
+type ReDelGroup struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+}
+
+type GetGroupIdList struct {
+	GroupIdList []string
+}
+
+type ReGetGroupIdList struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+	GroupInfo	 []GroupNameById
+}
+
+type GroupNameById struct {
+	ActionStatus string
+	ErrorInfo    string
+	ErrorCode    int64
+	GroupId 	 string
+	Name		 string
+}
+
+var allAccountsName []string
 //var (
 //	logFile, err = os.OpenFile("./IMTools/go.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 //	printLog     = log.New(logFile, "[print]", log.Ldate|log.Ltime|log.Llongfile)
@@ -230,6 +261,7 @@ func SendSystemMsg(userSig string, groupId string, content string) int64 {
 	//访问IM后台
 	replydata, err := HTTP_Post(httpUrl, string(re))
 	fmt.Printf("sendSysMsg--%v\nerr--%v\n", replydata, err)
+	fmt.Printf("SendSystemMsg_httpUrl--%v",httpUrl)
 
 	reSendSysMsg := ReSysMsg{}
 	json.Unmarshal([]byte(replydata), &reSendSysMsg)
@@ -246,13 +278,14 @@ func SendSystemMsg(userSig string, groupId string, content string) int64 {
 返回值：好友数，错误码
 */
 func GetFriendList(userSig string, userId string) (int64, int64) {
-	httpUrl := "https://console.tim.qq.com/v4/sns/friend_get_all?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+	httpUrl := "https://test.tim.qq.com/v4/sns/friend_get_all?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
 	//var errorCode int64
 
 	var getFriendAll = PullFriendList{}
 	getFriendAll.From_Account = userId
 	getFriendAll.StartIndex = 0
+	getFriendAll.TimeStamp = 0
 
 	//封装json应答包
 	re, err := json.Marshal(getFriendAll)
@@ -264,6 +297,7 @@ func GetFriendList(userSig string, userId string) (int64, int64) {
 	//访问IM后台
 	replydata, err := HTTP_Post(httpUrl, string(re))
 	fmt.Printf("GetFriendAll--%v\nerr--%v\n", replydata, err)
+	fmt.Printf("GetFriendAll_url--%v\n",httpUrl)
 
 	reFriendLis := ReFriendList{}
 	json.Unmarshal([]byte(replydata), &reFriendLis)
@@ -452,54 +486,146 @@ func DeleteFriend(userSig string, userId string) {
 
 /**
 功能：批量添加好友——指定一个用户Id，加指定个数的好友（没排除自己，自己也可以是自己的一个好友）
-参数：userSig——用户签名,groupId——群id集合，accoutNumOfgroup——群组中需要添加的用户数量（后期需从前端获取）,allAccountsName——要添加的所有账户名
+参数：userSig——用户签名,groupId——群id集合，accoutNumOfgroup——群组中需要添加的用户数量,allAccountsName——要添加的所有账户名
 返回值：错误码
 */
-func AddFriend(userSig string, userId string, friendNum int) int64 {
+func AddFriend(userSig string, userId string,friendNumFrom int,friendNumTo int) int64 {
+	//httpUrl := "https://console.tim.qq.com/v4/sns/friend_add?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 	httpUrl := "https://console.tim.qq.com/v4/sns/friend_add?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+
 
 	var batchAddFriend = BatchAddFriend{}
 	var addFriendItem = AddFriendItem{}
 	var friendArray []AddFriendItem
 	var errorCode int64
+	var friendLimit = 1000
 
 	//通过批量添加账号获取所有用户名集合，这里默认添加账户数为系统上限（100）
-	var userIdArray, _ = Multiaccount_PostData(userSig, friendNum)
+	//var userIdArray, _ = Multiaccount_PostData(userSig, friendNum)
 
-	for i := 0; i < friendNum; i++ {
-		//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
-		//	addFriendItem.To_Account = userIdArray[i+1]
-		//}else {
-		addFriendItem.To_Account = userIdArray[i]
-		//}
+	userIdArray := allAccountsName
 
-		addFriendItem.AddSource = "AddSource_Type_Android" //默认好友来源都为Android
-		friendArray = append(friendArray, addFriendItem)
+	if friendNumTo-friendNumFrom+1 > friendLimit { //如果人数超过1000
+		errorCode = 1000
+	}else{
+		for i := 0; i <= friendNumTo - friendNumFrom; i++ {
+			//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
+			//	addFriendItem.To_Account = userIdArray[i+1]
+			//}else {
+			addFriendItem.To_Account = userIdArray[friendNumFrom - 1 + i]
+			//}
 
+			addFriendItem.AddSource = "AddSource_Type_Android" //默认好友来源都为Android
+			friendArray = append(friendArray, addFriendItem)
+
+		}
+
+		batchAddFriend.From_Account = userId
+		batchAddFriend.AddFriendItem = friendArray
+
+		//封装json应答包
+		re, err := json.Marshal(batchAddFriend)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("BatchAddFriend request json--%s\n", re)
+		fmt.Printf("BatchAddFriend_url--%s\n", httpUrl)
+
+
+		//访问IM后台
+		replydata, err := HTTP_Post(httpUrl, string(re))
+		fmt.Printf("BatchAddFriend--%v\nerr--%v\n", replydata, err)
+
+		reBatchAddFriend := ReBatchAddFriend{}
+		json.Unmarshal([]byte(replydata), &reBatchAddFriend)
+
+		errorCode = reBatchAddFriend.ErrorCode
 	}
 
-	batchAddFriend.From_Account = userId
-	batchAddFriend.AddFriendItem = friendArray
+	//for i := 0; i < friendNum; i++ {
+	//	//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
+	//	//	addFriendItem.To_Account = userIdArray[i+1]
+	//	//}else {
+	//	addFriendItem.To_Account = userIdArray[i]
+	//	//}
+	//
+	//	addFriendItem.AddSource = "AddSource_Type_Android" //默认好友来源都为Android
+	//	friendArray = append(friendArray, addFriendItem)
+	//
+	//}
 
-	//封装json应答包
-	re, err := json.Marshal(batchAddFriend)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("BatchAddFriend request json--%s\n", re)
 
-	//访问IM后台
-	replydata, err := HTTP_Post(httpUrl, string(re))
-	fmt.Printf("BatchAddFriend--%v\nerr--%v\n", replydata, err)
-
-	reBatchAddFriend := ReBatchAddFriend{}
-	json.Unmarshal([]byte(replydata), &reBatchAddFriend)
-
-	errorCode = reBatchAddFriend.ErrorCode
 
 	return errorCode
 
 }
+
+//func AddFriend(userSig string, userId string,friendNum int,friendNumFrom int,friendNumTo int) int64 {
+//	httpUrl := "https://console.tim.qq.com/v4/sns/friend_add?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+//
+//	var batchAddFriend = BatchAddFriend{}
+//	var addFriendItem = AddFriendItem{}
+//	var friendArray []AddFriendItem
+//	var errorCode int64
+//	var friendLimit = 1000
+//
+//	//通过批量添加账号获取所有用户名集合，这里默认添加账户数为系统上限（100）
+//	var userIdArray, _ = Multiaccount_PostData(userSig, friendNum)
+//
+//	if friendNumTo-friendNumFrom+1 > friendLimit { //如果人数超过1000
+//		errorCode = 1000
+//	}else{
+//		for i := 0; i <= friendNumTo - friendNumFrom; i++ {
+//			//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
+//			//	addFriendItem.To_Account = userIdArray[i+1]
+//			//}else {
+//			addFriendItem.To_Account = userIdArray[friendNumFrom - 1 + i]
+//			//}
+//
+//			addFriendItem.AddSource = "AddSource_Type_Android" //默认好友来源都为Android
+//			friendArray = append(friendArray, addFriendItem)
+//
+//		}
+//
+//		batchAddFriend.From_Account = userId
+//		batchAddFriend.AddFriendItem = friendArray
+//
+//		//封装json应答包
+//		re, err := json.Marshal(batchAddFriend)
+//		if err != nil {
+//			log.Fatal(err)
+//		}
+//		fmt.Printf("BatchAddFriend request json--%s\n", re)
+//		fmt.Printf("BatchAddFriend_url--%s\n", httpUrl)
+//
+//
+//		//访问IM后台
+//		replydata, err := HTTP_Post(httpUrl, string(re))
+//		fmt.Printf("BatchAddFriend--%v\nerr--%v\n", replydata, err)
+//
+//		reBatchAddFriend := ReBatchAddFriend{}
+//		json.Unmarshal([]byte(replydata), &reBatchAddFriend)
+//
+//		errorCode = reBatchAddFriend.ErrorCode
+//	}
+//
+//	//for i := 0; i < friendNum; i++ {
+//	//	//if i == friendNum { //如果添加的好友为其本身，则添加其序号后一位的user
+//	//	//	addFriendItem.To_Account = userIdArray[i+1]
+//	//	//}else {
+//	//	addFriendItem.To_Account = userIdArray[i]
+//	//	//}
+//	//
+//	//	addFriendItem.AddSource = "AddSource_Type_Android" //默认好友来源都为Android
+//	//	friendArray = append(friendArray, addFriendItem)
+//	//
+//	//}
+//
+//
+//
+//	return errorCode
+//
+//}
 
 /**
 功能：增加群组成员
@@ -740,8 +866,8 @@ func BatchCreatgroup(userSig string, groupNum int, accountName string) int64 {
 func Multiaccount_PostData(userSig string, accountsnum int) ([]string, int64) {
 	httpUrl := "https://console.tim.qq.com/v4/im_open_login_svc/multiaccount_import?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
 
-	//假设单次请求导入账号数上限：10——需要添加的总账号数：accountsnum = 100
-	var accountLimit = 2
+	//单次请求导入账号数上限：100——需要添加的总账号数：accountsnum = 100
+	var accountLimit = 100
 	var multiaccount = Multiaccount{}
 	var accounts []string
 	var allAccounts []string
@@ -785,6 +911,7 @@ func Multiaccount_PostData(userSig string, accountsnum int) ([]string, int64) {
 
 	}
 
+	allAccountsName = allAccounts
 	return allAccounts, errorCode
 
 	////记录所有账号 供后续获取全部成功的账号
@@ -898,5 +1025,102 @@ func HTTP_Post(url string, reqbody string) (string, error) {
 	defer resp.Body.Close()
 
 	return result, err
+
+}
+
+/**
+功能：解散所有群组
+参数：userSig——用户签名,sdkappid,groupId
+返回值：错误码
+*/
+
+func DeleteGroup(userSig string,sdkappid int,identifier string,groupId string)  int64{
+	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/destroy_group?usersig=" + userSig + "&identifier=" + identifier + "&sdkappid=" + strconv.Itoa(sdkappid) + "&random=99999999&contenttype=json"
+	//httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/get_appid_group_list?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.FormatInt(sdkappid, 10) + "&random=99999999&contenttype=json"
+
+	//groupIdArry := GetAllGroup(userSig)
+	var errorCode int64
+
+		var deleteGroup = DelGroup{}
+		deleteGroup.GroupId = groupId
+
+		//封装json应答包
+		re, err := json.Marshal(deleteGroup)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("DeleteGroup request json--%s\n", re)
+
+		//访问IM后台
+		replydata, err := HTTP_Post(httpUrl, string(re))
+		fmt.Printf("DeleteGroup--%v\nerr--%v\n", replydata, err)
+
+		//解析应答包
+		reDelGroup := ReDelGroup{}
+
+		json.Unmarshal([]byte(replydata), &reDelGroup)
+
+		errorCode = reDelGroup.ErrorCode
+
+		return errorCode
+
+
+}
+
+/**
+功能：获取群组中固定格式的群组名
+参数：userSig——用户签名,sdkappid
+返回值：错误码
+*/
+
+func DeleteNameGroup(userSig string,sdkappid int,identifier string) int64 {
+	//httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/get_group_info?usersig=" + userSig + "&identifier=" + sdkconst.Identifier + "&sdkappid=" + strconv.Itoa(sdkconst.Appid) + "&random=99999999&contenttype=json"
+	httpUrl := "https://console.tim.qq.com/v4/group_open_http_svc/get_group_info?usersig=" + userSig + "&identifier=" + identifier + "&sdkappid=" + strconv.Itoa(sdkappid) + "&random=99999999&contenttype=json"
+
+	//获取所有群组idlist
+	groupIdArry := GetAllGroup(userSig)
+	getGroupIdList := GetGroupIdList{}
+	getGroupIdList.GroupIdList = groupIdArry
+
+	var errorCode int64
+
+	//封装json应答包
+	re, err := json.Marshal(getGroupIdList)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("DeleteNameGroup request json--%s\n", re)
+
+	//访问IM后台
+	replydata, err := HTTP_Post(httpUrl, string(re))
+	fmt.Printf("DeleteNameGroup--%v\nerr--%v\n", replydata, err)
+
+	//解析应答包
+	pattern := "autotest_"
+
+	var groupNameByIdList []GroupNameById
+	groupNameById := GroupNameById{}
+
+	reGetGroupIdList := ReGetGroupIdList{}
+
+	json.Unmarshal([]byte(replydata), &reGetGroupIdList)
+
+	groupNameByIdList = reGetGroupIdList.GroupInfo
+
+	for i := 0; i < len(groupNameByIdList);i++ {
+
+		groupNameById.GroupId = groupNameByIdList[i].GroupId
+		groupNameById.Name = groupNameByIdList[i].Name
+		if strings.HasPrefix(groupNameById.Name, pattern) {
+			DeleteGroup(userSig,sdkappid,identifier,groupNameById.GroupId)
+		}else {
+			continue
+		}
+
+
+
+	}
+	errorCode = reGetGroupIdList.ErrorCode
+	return errorCode
 
 }

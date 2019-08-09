@@ -17,7 +17,7 @@ func InitRouter() *gin.Engine {
 	//批量加群url——http://127.0.0.1:8000/batchaddgroup？groupid=xxx&accoutnumofgroup=xxx
 	router.POST("/batchaddgroup", BatchAddGroup)
 
-	//批量加好友url——http://127.0.0.1:8000/batchaddfriend？userid=xxx&friendnum=xxx
+	//批量加好友url——http://127.0.0.1:8000/batchaddfriend？userid=xxx&friendnum=xxx&friendNumFrom=xxx&friendnumto=xxx
 	router.POST("/batchaddfriend", BatchAddFriend)
 
 	//批量发单聊信息url——http://127.0.0.1:8000/batchsendc2cmsg？usernum=xxx
@@ -31,6 +31,13 @@ func InitRouter() *gin.Engine {
 
 	//在指定群组发送系统通知url——http://127.0.0.1:8000/sendgroupsysmsg？groupname=xxx&content=xxx
 	router.POST("/sendgroupsysmsg", SendGroupSysMsg)
+
+	//批量添加账户url——http://127.0.0.1:8000/batchaddaccounts？allaccountsnum=xxx
+	router.POST("/batchaddaccounts", BatchAddAccounts)
+
+	//批量添加账户url——http://127.0.0.1:8000/deletegroupbyname？sdkappid=xxx&identifier=xxx
+	router.POST("/deletegroupbyname", DeleteGroupByName)
+
 
 	return router
 }
